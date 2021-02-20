@@ -5,14 +5,14 @@
 #       rate mentioned here to achieve good performance
 #############################################################################
 python3 -u encoder_train.py \
-    --model cnn_autoencoder \
+    --model lstm_autoencoder \
     --kernel-size 1 \
     --hidden-dim 10 \
-    --epochs 3 \
+    --epochs 15 \
     --weight-decay 1000 \
     --momentum 0.9 \
-    --batch-size 100 \
-    --lr 0.000001 | tee autoencoder.log
+    --batch-size 50 \
+    --lr 0.000001 | tee lstm_autoencoder.log
 #############################################################################
 #                             END OF YOUR CODE                              #
 #############################################################################

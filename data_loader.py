@@ -1,9 +1,14 @@
 import numpy as np
 import datetime
 from multiprocessing import Pool
+from os import listdir
+from os.path import isfile, join
 
 data_directionary = 'data/train_sub/'
 processed_data_directory = 'data/train_4096/'
+reduced_data_directory = 'data/train_100/'
+test_directory = 'data/test/'
+reduced_test_directory = 'data/test_100/'
 
 train_sets = [0,1,3,4,6,7,9,10,12,14,15,16]
 test_sets = [2,5,8,11,13]
@@ -78,7 +83,7 @@ def load_preprocessed_set(ind):
 	label = np.loadtxt(processed_data_directory+'train_sub_%i_label.csv'%ind, delimiter=',', dtype=float)
 	return (ind,(data, label))
 
-def get_data():
+def get_4096_data():
 	train_data = {}
 	test_data = {}
 	n_train_data = 0
@@ -98,6 +103,39 @@ def get_data():
 	workerpool.close()
 	workerpool.join()
 	return {'train':train_data, 'test':test_data, 'n_train':n_train_data, 'n_test':n_test_data}
+
+def load_reduced_set(ind):
+	print(str(datetime.datetime.now())+': start loading data set %i'%ind)
+	data = np.loadtxt(reduced_data_directory+'train_sub_%i_data.csv'%ind, delimiter=',', dtype=float)
+	label = np.loadtxt(reduced_data_directory+'train_sub_%i_label.csv'%ind, delimiter=',', dtype=float)
+	return (ind,(data, label))
+
+def get_100_data():
+	train_data = {}
+	test_data = {}
+	n_train_data = 0
+	n_test_data = 0 
+	workerpool = Pool(8)
+	traindataresult = workerpool.map(load_reduced_set, train_sets)
+	#workerpool.join()
+	for train in traindataresult:
+		dkey, data = train 
+		train_data[dkey] = data
+		n_train_data += len(train_data[dkey][1])
+	testdataresult = workerpool.map(load_reduced_set, test_sets)
+	for test in testdataresult:
+		dkey, data = test
+		test_data[dkey] = data
+		n_test_data += len(test_data[dkey][1])
+	workerpool.close()
+	workerpool.join()
+	return {'train':train_data, 'test':test_data, 'n_train':n_train_data, 'n_test':n_test_data}
+
+def get_data(vlength):
+	if vlength == 4096:
+		return get_4096_data()
+	elif vlength == 100:
+		return get_100_data()
 
 def get_brief_data():
 	train_data = {}
@@ -120,28 +158,97 @@ def get_brief_data():
 	workerpool.join()
 	return {'train':train_data, 'test':test_data, 'n_train':n_train_data, 'n_test':n_test_data}
 
-def get_data_batch(data, batch_size):
+def get_data_batch(data, batch_size, vlength):
 	# every 150000 can fit in 36 * 4096 + 2544
-	data_ind = []
-	for k in data.keys():
-		subset, _ = data[k]
-		n_d = subset.shape[0]
-		subdata_ind = np.zeros((n_d-36+1,2),dtype=int)
-		subdata_ind[:,0] = k
-		subdata_ind[:,1] = np.asarray(list(range(n_d-36+1)))
-		data_ind.append(subdata_ind)
-	data_ind = np.concatenate(data_ind,axis=0)
-	np.random.shuffle(data_ind)
-	total_n_d = data_ind.shape[0]
-	for i in range(0,total_n_d,batch_size):
-		data_range = data_ind[i:min(i+batch_size,total_n_d),:]
-		batchdata = np.zeros((batch_size, 36* 4096),dtype=int)
-		batchlabel = np.zeros((batch_size, 1), dtype=float)
-		for j in range(data_range.shape[0]):
-			subdata, sublabel = data[data_range[j,0]]
-			batchdata[j,:] = (subdata[data_range[j,1]:data_range[j,1]+36,:]).flatten()
-			batchlabel[j,0] = sublabel[data_range[j,1]+35]
-		yield (batchdata, batchlabel)
+	if vlength == 4096:
+		data_ind = []
+		for k in data.keys():
+			subset, _ = data[k]
+			n_d = subset.shape[0]
+			subdata_ind = np.zeros((n_d-36+1,2),dtype=int)
+			subdata_ind[:,0] = k
+			subdata_ind[:,1] = np.asarray(list(range(n_d-36+1)))
+			data_ind.append(subdata_ind)
+		data_ind = np.concatenate(data_ind,axis=0)
+		np.random.shuffle(data_ind)
+		total_n_d = data_ind.shape[0]
+		for i in range(0,total_n_d,batch_size):
+			data_range = data_ind[i:min(i+batch_size,total_n_d),:]
+			batchdata = np.zeros((batch_size, 36* 4096),dtype=int)
+			batchlabel = np.zeros((batch_size, 1), dtype=float)
+			for j in range(data_range.shape[0]):
+				subdata, sublabel = data[data_range[j,0]]
+				batchdata[j,:] = (subdata[data_range[j,1]:data_range[j,1]+36,:]).flatten()
+				batchlabel[j,0] = sublabel[data_range[j,1]+35]
+			yield (batchdata, batchlabel)
+	elif vlength == 100:
+		data_ind = []
+		for k in data.keys():
+			subset, _ = data[k]
+			n_d = subset.shape[0]
+			subdata_ind = np.zeros((n_d-36+1,2),dtype=int)
+			subdata_ind[:,0] = k
+			subdata_ind[:,1] = np.asarray(list(range(n_d-36+1)))
+			data_ind.append(subdata_ind)
+		data_ind = np.concatenate(data_ind,axis=0)
+		np.random.shuffle(data_ind)
+		total_n_d = data_ind.shape[0]
+		for i in range(0,total_n_d,batch_size):
+			data_range = data_ind[i:min(i+batch_size,total_n_d),:]
+			batchdata = np.zeros((batch_size, 36, 100),dtype=float)
+			batchlabel = np.zeros((batch_size, 1), dtype=float)
+			for j in range(data_range.shape[0]):
+				subdata, sublabel = data[data_range[j,0]]
+				batchdata[j,:,:] = subdata[data_range[j,1]:data_range[j,1]+36,:]
+				batchlabel[j,0] = sublabel[data_range[j,1]+35]
+			yield (batchdata, batchlabel)
+
+def get_data_batch_stride(data, batch_size, stride, vlength):
+	# every 150000 can fit in 36 * 4096 + 2544
+	if vlength == 4096:
+		data_ind = []
+		for k in data.keys():
+			subset, _ = data[k]
+			n_d = subset.shape[0]
+			subdata_ind = np.zeros((int((n_d-36)/stride)+1,2),dtype=int)
+			subdata_ind[:,0] = k
+			subdata_ind[:,1] = np.asarray(list(range(0,n_d-35,stride)))
+			data_ind.append(subdata_ind)
+		data_ind = np.concatenate(data_ind,axis=0)
+		np.random.shuffle(data_ind)
+		total_n_d = data_ind.shape[0]
+		for i in range(0,total_n_d,batch_size):
+			data_range = data_ind[i:min(i+batch_size,total_n_d),:]
+			batchdata = np.zeros((batch_size, 36* 4096),dtype=int)
+			batchlabel = np.zeros((batch_size, 1), dtype=float)
+			for j in range(data_range.shape[0]):
+				subdata, sublabel = data[data_range[j,0]]
+				batchdata[j,:] = (subdata[data_range[j,1]:data_range[j,1]+36,:]).flatten()
+				batchlabel[j,0] = sublabel[data_range[j,1]+35]
+			yield (batchdata, batchlabel)
+	elif vlength == 100:
+		data_ind = []
+		for k in data.keys():
+			subset, _ = data[k]
+			n_d = subset.shape[0]
+			#print(n_d)
+			subdata_ind = np.zeros((int((n_d-36)/stride)+1,2),dtype=int)
+			subdata_ind[:,0] = k
+			subdata_ind[:,1] = np.asarray(list(range(0,n_d-35,stride)))
+			data_ind.append(subdata_ind)
+		data_ind = np.concatenate(data_ind,axis=0)
+		np.random.shuffle(data_ind)
+		total_n_d = data_ind.shape[0]
+		for i in range(0,total_n_d,batch_size):
+			data_range = data_ind[i:min(i+batch_size,total_n_d),:]
+			batchdata = np.zeros((batch_size, 36, 100),dtype=float)
+			batchlabel = np.zeros((batch_size, 1), dtype=float)
+			for j in range(data_range.shape[0]):
+				subdata, sublabel = data[data_range[j,0]]
+				batchdata[j,:,:] = subdata[data_range[j,1]:data_range[j,1]+36,:]
+				batchlabel[j,0] = sublabel[data_range[j,1]+35]
+			yield (batchdata, batchlabel)
+
 
 def get_data_vector_batch(data, batch_size):
 	# every 150000 can fit in 36 * 4096 + 2544
@@ -168,7 +275,7 @@ def get_data_vector_batch(data, batch_size):
 
 def get_data_sts():
 	data = get_data()
-	train_data = data['train']
+	train_data = data['test']
 	result = 0
 	max_range = 0
 	for k in train_data.keys():
@@ -178,10 +285,55 @@ def get_data_sts():
 		if set_max> max_range:
 			max_range = set_max
 			print(k)
-	return result/(data['n_train']*4096),max_range
+	return result/(data['n_test']*4096),max_range
 
+def load_one_file(f):
+	#print(f)
+	testdata = np.loadtxt(test_directory+f,delimiter=',',dtype=int,skiprows=1)
+	return (f.split('.')[0], testdata)
 
+def save_one_file(f):
+	i, reduced_test_data = f
+	#print(i)
+	np.savetxt(reduced_test_directory+i+'.csv',reduced_test_data,delimiter=',',fmt='%.12f')
 
+def load_test_data():
+	print(str(datetime.datetime.now())+': start loading testing data')
+	testfiles = [f for f in listdir(test_directory)]
+	workerpool = Pool(20)
+	testdataresult = workerpool.map(load_one_file, testfiles)
+	workerpool.close()
+	workerpool.join()
+	files = [f for f,_ in testdataresult]
+	alldata = [segtestdata for _, segtestdata in testdataresult]
+	testdata = np.stack(alldata,axis=0)
+	return (files, testdata)
+
+def save_test_data(testdata):
+	print(str(datetime.datetime.now())+': start saving redced testing data')
+	workerpool = Pool(20)
+	workerpool.map(save_one_file, testdata.items())
+	workerpool.close()
+	workerpool.join()
+	#for i in testdata.keys():
+	#	reduced_test_data = testdata[i]
+	#	np.savetxt(reduced_test_directory+i+'.csv',reduced_test_data,delimiter=',',fmt='%.12f')
+def load_reduced_file(f):
+	#print(f)
+	testdata = np.loadtxt(reduced_test_directory+f,delimiter=',',dtype=float)
+	return (f.split('.')[0], testdata)
+
+def load_reduced_test_data():
+	print(str(datetime.datetime.now())+': start loading testing data')
+	testfiles = [f for f in listdir(test_directory)]
+	workerpool = Pool(20)
+	testdataresult = workerpool.map(load_reduced_file, testfiles)
+	workerpool.close()
+	workerpool.join()
+	files = [f for f,_ in testdataresult]
+	alldata = [segtestdata for _, segtestdata in testdataresult]
+	testdata = np.stack(alldata,axis=0)
+	return (files, testdata)
 
 #def get_training_data():
 if __name__ == "__main__":

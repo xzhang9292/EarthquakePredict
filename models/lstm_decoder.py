@@ -1,9 +1,15 @@
+import torch
 import torch.nn as nn
 import torch.nn.init as init
 class Decoder(nn.Module):
-	def __init__(self, hid_dim, output, n_layers):
-		super().__init__()
-		self.lstm = nn.LSTM(hid_dim, output, n_layers)
-	def forward(self, src):
-		outputs, (hidden, cell) = self.lstm(src)
-		return output, hidden, cell
+	def __init__(self, inputdim,hid_dim, layers):
+		super(Decoder,self).__init__()
+		self.hidden = hid_dim
+		self.n_layers = layers
+		self.lstm = nn.LSTM(inputdim, hid_dim, layers)
+	def forward(self,output):
+		seqsize,batch,hiddensize = output.shape
+		h0 = torch.randn(self.n_layers,batch,self.hidden)
+		c0 = torch.randn(self.n_layers,batch,self.hidden)
+		outputs, (hidden, cell) = self.lstm(output,(h0, c0))
+		return outputs

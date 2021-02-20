@@ -3,6 +3,7 @@
 from __future__ import print_function
 import argparse
 import numpy as np
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,6 +13,7 @@ from torch.autograd import Variable
 import data_loader as dler
 import models.lstm_autoencoder
 import models.autoencoder
+import models.vanilla_autoencoder
 import datetime
 # Training settings
 parser = argparse.ArgumentParser(description='final project')
@@ -27,7 +29,7 @@ parser.add_argument('--batch-size', type=int, metavar='N',
 parser.add_argument('--epochs', type=int, metavar='N',
                     help='number of epochs to train')
 parser.add_argument('--model',
-                    choices=['cnn_autoencoder','lstm_autoencoder'],
+                    choices=['cnn_autoencoder','lstm_autoencoder','vanilla_autoencoder'],
                     help='which model to train/evaluate')
 parser.add_argument('--hidden-dim', type=int,
                     help='number of hidden features/activations')
@@ -53,17 +55,19 @@ torch.manual_seed(args.seed)
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
 '''
-data_mean = 4.473983593435619
-data_range = 5444
+data_mean = 0#4.473983593435619
+data_range = 1#5444*1.5
 
-data = dler.get_data()
+data = dler.get_data(4096)
 train_data = data['train']
 test_data = data['test']
 n_train_data = data['n_train']
 if args.model == 'cnn_autoencoder':
     model = models.autoencoder.Autoencoder()
+if args.model == 'vanilla_autoencoder':
+    model = models.vanilla_autoencoder.Autoencoder()
 elif args.model == 'lstm_autoencoder':
-    model = models.lstm_autoencoder.Seq2seq()
+    model = models.lstm_autoencoder.Seq2seq(inputdim = 1, hidden = 100, layers = 1)
 #model = torch.load('mymodel2.pt')
 
 criterion = F.l1_loss
@@ -101,6 +105,7 @@ def train(epoch):
         #############################################################################
         optimizer.zero_grad()
         output = model(data)
+        #print(output.size())
         loss = criterion(output, data)
         loss.backward()
         optimizer.step() 
@@ -113,9 +118,9 @@ def train(epoch):
             examples_this_epoch = batch_idx * len(data)
             epoch_progress = examples_this_epoch/n_train_data * 100#100. * batch_idx / len(train_loader)
             print(str(datetime.datetime.now()) + ' - Train Epoch: {} [{} ({:.0f}%)]\t'
-                  'Train Loss: {:.6f}\tVal Loss: {:.6f}\t'.format(
+                  'Train Loss: {:.10f}\tVal Loss: {:.10f}\t'.format(
                 epoch, examples_this_epoch,
-                epoch_progress, train_loss/args.batch_size, val_loss))
+                epoch_progress, train_loss, val_loss))
         batch_idx += 1
         #if batch_idx == 1:
         #    break
@@ -129,12 +134,13 @@ def evaluate(split, verbose=False):
     correct = 0
     n_examples = 0
     batch_idx = 0
-    for batch in dler.get_data_vector_batch(test_data, args.batch_size):
+    for batch in dler.get_data_vector_batch(train_data, args.batch_size):
         data  = Variable(torch.from_numpy((batch[0]-data_mean)/data_range).float())
         if args.cuda:
             data = data.cuda()
         output = model(data)
-        new_loss =criterion(output, data, size_average=False).item()
+
+        new_loss =criterion(output, data).item()
         '''
         print(data.size())
         print(output.size())
@@ -148,9 +154,12 @@ def evaluate(split, verbose=False):
         # predict the argmax of the log-probabilities
         #pred = output.data.max(1, keepdim=True)[1]
         #correct += pred.eq(target.data.view_as(pred)).cpu().sum()
-        n_examples += output.size(0)
+        n_examples += 1
         #if n_batches and (batch_i >= n_batches):
         #    break
+        if(random.random()<0.001):
+            print(data.data.cpu().numpy()[0])
+            print(output.data.cpu().numpy()[0])
 
     loss /= n_examples
     if verbose:
@@ -161,11 +170,12 @@ def evaluate(split, verbose=False):
 
 # train the model one epoch at a time
 for epoch in range(1, args.epochs + 1):
+    #print(epoch)
     train(epoch)
 #evaluate('val', verbose=True)
 
 # Save the model (architecture and weights)
-torch.save(model, args.model + '2.pt')
+torch.save(model, args.model + '3.pt')
 # Later you can call torch.load(file) to re-load the trained model into python
 # See http://pytorch.org/docs/master/notes/serialization.html for more details
 
