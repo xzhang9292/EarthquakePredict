@@ -1,2 +1,1 @@
 # EarthquakePredict
-# EarthquakePredict
